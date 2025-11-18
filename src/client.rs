@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use client::ipc_channel::ipc::IpcReceiver as Receiver;
 use client::ipc_channel::ipc::IpcSender as Sender;

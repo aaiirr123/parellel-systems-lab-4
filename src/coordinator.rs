@@ -203,12 +203,12 @@ impl Coordinator {
                         }
                     }
                     Err(TryRecvError::Empty) => {
-                        if (num_tries > 1) {
+                        if num_tries > 2 {
                             // println!("Did not recieve response from participant");
                             should_commit = false;
                             break;
                         }
-                        thread::sleep(Duration::from_millis(2));
+                        thread::sleep(Duration::from_millis(5));
                         num_tries += 1;
                         continue;
                     }
