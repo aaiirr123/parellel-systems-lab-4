@@ -112,13 +112,6 @@ impl Participant {
     /// HINT: You will need to implement the actual sending
     ///
     pub fn send(&mut self, pm: ProtocolMessage) {
-        self.log.append(
-            pm.mtype,
-            pm.txid.clone(),
-            pm.senderid.clone(),
-            pm.opid.clone(),
-        );
-
         let x: f64 = random();
 
         if x <= self.send_success_prob {
@@ -147,25 +140,33 @@ impl Participant {
         let x: f64 = random();
 
         if let Some(message) = request_option {
-            // self.log.append(
-            //     message.mtype,
-            //     message.txid.clone(),
-            //     message.senderid.clone(),
-            //     message.opid.clone(),
-            // );
             if message.mtype == MessageType::CoordinatorPropose {
-                println!("coordinator proposed work to pariticpant and its completed");
+                // println!("coordinator proposed work to pariticpant and its completed");
                 if x <= self.operation_success_prob {
+                    self.log.append(
+                        MessageType::ParticipantVoteCommit,
+                        message.txid.clone(),
+                        message.senderid.clone(),
+                        message.opid.clone(),
+                    );
                     return true;
                 } else {
+                    self.log.append(
+                        MessageType::ParticipantVoteAbort,
+                        message.txid.clone(),
+                        message.senderid.clone(),
+                        message.opid.clone(),
+                    );
                     return false;
                 }
             } else if (message.mtype == MessageType::CoordinatorCommit) {
-                println!("commited work");
+                // println!("commited work");
+
                 self.successful_ops += 1;
                 return true;
             } else if message.mtype == MessageType::CoordinatorAbort {
-                println!("Coordinator asked participant to abort");
+                // println!("Coordinator asked participant to abort");
+
                 self.failed_ops += 1;
 
                 return true;
@@ -221,7 +222,7 @@ impl Participant {
             }
         };
 
-        println!("Recieved result for particapant");
+        // println!("Recieved result for particapant");
         return Some(res);
 
         // TODO
@@ -236,7 +237,7 @@ impl Participant {
     pub fn protocol(&mut self) {
         trace!("{}::Beginning protocol", self.id_str.clone());
 
-        println!("Starting to run protocol for participant");
+        // println!("Starting to run protocol for participant");
 
         // TODO
         while self.running.load(Ordering::SeqCst) {
@@ -263,7 +264,7 @@ impl Participant {
             self.send(pm);
 
             // verify with the coordinator what the overall decision is
-            println!("verify with coordinator");
+            // println!("verify with coordinator");
             let commit_res = match self.recv_result() {
                 Some(m) => m,
                 None => {

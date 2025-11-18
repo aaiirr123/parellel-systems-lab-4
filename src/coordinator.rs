@@ -104,7 +104,7 @@ impl Coordinator {
         assert!(self.state == CoordinatorState::Quiescent);
 
         // TODO
-        println!("Joined as participant {}", name);
+        // println!("Joined as participant {}", name);
         self.particiapnt.insert(name.clone(), (tx, rx));
     }
 
@@ -122,7 +122,6 @@ impl Coordinator {
         rx: Receiver<ProtocolMessage>,
     ) {
         assert!(self.state == CoordinatorState::Quiescent);
-        println!("Joined as client {}", name);
         let id = self.client_receiver_set.add(rx).unwrap();
         self.clients_sender_set.insert(id, tx);
 
@@ -131,7 +130,6 @@ impl Coordinator {
 
     pub fn shutdown_client_join(&mut self, name: &String, rx: Receiver<ProtocolMessage>) {
         assert!(self.state == CoordinatorState::Quiescent);
-        println!("Joined as client {}", name);
         self.client_receiver_set.add(rx).unwrap();
         // TODO
     }
@@ -150,64 +148,13 @@ impl Coordinator {
         );
     }
 
-    pub fn watch_clients(&mut self) -> Option<ProtocolMessage> {
-        println!("waiting for client message");
-
-        while self.running.load(Ordering::SeqCst) {
-            for event in self.client_receiver_set.select().unwrap() {
-                match event {
-                    ipc_channel::ipc::IpcSelectionResult::MessageReceived(
-                        _,
-                        opaque_ipc_message,
-                    ) => {
-                        
-                        let msg: ProtocolMessage = opaque_ipc_message.to().unwrap();
-                        
-                        if (msg.mtype == MessageType::CoordinatorExit) {
-                            break;
-                        }
-                        
-                        return Some(msg);
-                    }
-                    ipc_channel::ipc::IpcSelectionResult::ChannelClosed(_) => {
-                        return None;
-                    }
-                }
-            }
-        }
-
-        return None;
-
-        // let client: &(Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
-        //     self.clients.get("1").unwrap();
-
-        // loop {
-        //     if !self.running.load(Ordering::SeqCst) {
-        //         return None;
-        //     }
-
-        //     match client.1.try_recv() {
-        //         Ok(message) => {
-        //             return Some(message);
-        //         }
-        //         Err(TryRecvError::Empty) => {
-        //             thread::sleep(Duration::from_millis(10));
-        //             continue;
-        //         }
-        //         Err(TryRecvError::IpcError(_)) => {
-        //             return None;
-        //         }
-        //     }
-        // }
-    }
-
     pub fn send_client_result(
         &mut self,
         should_commit: bool,
         client_message: ProtocolMessage,
         id: u64,
     ) {
-        println!("waiting for client message");
+        // println!("waiting for client message");
         let client_tx: &Sender<ProtocolMessage> = self.clients_sender_set.get(&id).unwrap();
 
         let message_type;
@@ -228,9 +175,6 @@ impl Coordinator {
     }
 
     pub fn send_particapant_work(&mut self, client_message: ProtocolMessage) -> bool {
-        let particpant: &(Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
-            self.particiapnt.get("1").unwrap();
-
         let participant_msg: ProtocolMessage = message::ProtocolMessage::generate(
             message::MessageType::CoordinatorPropose,
             client_message.txid.clone(),
@@ -238,23 +182,48 @@ impl Coordinator {
             client_message.opid.clone(),
         );
 
-        particpant.0.send(participant_msg).unwrap();
+        let mut should_commit = true;
 
-        let result = particpant.1.recv().unwrap();
+        for (key, value) in &self.particiapnt {
+            value.0.send(participant_msg.clone()).unwrap();
 
-        if result.mtype == MessageType::ParticipantVoteCommit {
-            return true;
-        } else if result.mtype == MessageType::ParticipantVoteAbort {
-            return false;
-        } else {
-            panic!("Invalid state: {:?}", result.mtype);
+            let mut num_tries = 0;
+
+            while self.running.load(Ordering::SeqCst) {
+                match value.1.try_recv() {
+                    Ok(message) => {
+                        if message.mtype == MessageType::ParticipantVoteAbort {
+                            should_commit = false;
+                            break;
+                        } else if message.mtype == MessageType::ParticipantVoteCommit {
+                            // println!("Participant voted to commit");
+                            break;
+                        } else {
+                            panic!("Invalid state: {:?}", message.mtype);
+                        }
+                    }
+                    Err(TryRecvError::Empty) => {
+                        if (num_tries > 1) {
+                            // println!("Did not recieve response from participant");
+                            should_commit = false;
+                            break;
+                        }
+                        thread::sleep(Duration::from_millis(1));
+                        num_tries += 1;
+                        continue;
+                    }
+                    Err(TryRecvError::IpcError(_)) => {
+                        should_commit = false;
+                        break;
+                    }
+                }
+            }
         }
+
+        return should_commit;
     }
 
     pub fn send_coordinator_cancel_alert(&mut self) {
-        let particpant: &(Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
-            self.particiapnt.get("1").unwrap();
-
         let exit_msg: ProtocolMessage = message::ProtocolMessage::generate(
             message::MessageType::CoordinatorExit,
             "coordinator".to_string(),
@@ -265,7 +234,9 @@ impl Coordinator {
         for (key, value) in &self.clients_sender_set {
             value.send(exit_msg.clone()).unwrap();
         }
-        particpant.0.send(exit_msg.clone()).unwrap();
+        for (key, value) in &self.particiapnt {
+            value.0.send(exit_msg.clone()).unwrap();
+        }
     }
 
     pub fn send_particapant_result(
@@ -273,8 +244,6 @@ impl Coordinator {
         should_commit: bool,
         client_message: ProtocolMessage,
     ) {
-        let particpant: &(Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
-            self.particiapnt.get("1").unwrap();
         let message_type;
         if should_commit {
             message_type = MessageType::CoordinatorCommit;
@@ -295,7 +264,10 @@ impl Coordinator {
             "coordinator".to_string(),
             client_message.opid,
         );
-        particpant.0.send(participant_msg).unwrap();
+
+        for (key, value) in &self.particiapnt {
+            value.0.send(participant_msg.clone()).unwrap();
+        }
     }
 
     ///
@@ -310,16 +282,20 @@ impl Coordinator {
 
         while self.running.load(Ordering::SeqCst) {
             for event in self.client_receiver_set.select().unwrap() {
-                println!("event");
                 match event {
                     ipc_channel::ipc::IpcSelectionResult::MessageReceived(
                         id,
                         opaque_ipc_message,
                     ) => {
                         let client_message: ProtocolMessage = opaque_ipc_message.to().unwrap();
+                        // println!("recieved request {:?}", client_message.clone());
+
                         if client_message.mtype == MessageType::ClientRequest {
+                            // println!("Recieved a client request");
+
                             let should_commit: bool =
                                 self.send_particapant_work(client_message.clone());
+                            // println!("Coordinator wants to commit");
                             if should_commit {
                                 self.successful_ops += 1;
                             } else {

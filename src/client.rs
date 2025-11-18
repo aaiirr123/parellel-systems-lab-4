@@ -81,7 +81,7 @@ impl Client {
     pub fn wait_for_exit_signal(&mut self) {
         trace!("{}::Waiting for exit signal", self.id_str.clone());
 
-        println!("Client is done, waiting on the coordinator");
+        // println!("Client is done, waiting on the coordinator");
 
         let exit_msg = self.recv_result();
 
@@ -118,7 +118,7 @@ impl Client {
 
         // TODO
         self.tx.send(pm).unwrap();
-        println!("sent op for client");
+        // println!("sent op for client");
 
         trace!(
             "{}::Sent operation #{}",
@@ -144,7 +144,7 @@ impl Client {
             }
         };
 
-        println!("Recieved result for client");
+        // println!("Recieved result for client");
         return res.mtype;
 
         // TODO
@@ -175,25 +175,26 @@ impl Client {
     ///       exit signal before returning from the protocol method!
     ///
     pub fn protocol(&mut self, n_requests: u32) {
-        println!("Starting to run protocol for client");
+        // println!("Starting to run protocol for client");
 
         // TODO
         for i in 0..n_requests {
             if !self.running.load(Ordering::SeqCst) {
                 break;
             };
-            println!("Running request{} ", i);
+            // println!("Running request{} ", i);
             self.send_next_operation();
             let coord_res = self.recv_result();
 
             if coord_res == MessageType::ClientResultCommit {
-                println!("Coordinator got client success");
+                // println!("Coordinator got client success");
                 self.successful_ops += 1;
             } else if coord_res == MessageType::ClientResultAbort {
-                println!("Coordinator got client abort");
+                // println!("Coordinator got client abort");
+         
                 self.failed_ops += 1;
             } else if coord_res == MessageType::CoordinatorExit {
-                println!("Coordinator has disconectted");
+                // println!("Coordinator has disconectted");
                 break;
             } else {
                 panic!("Invalid message for client: {:?}", coord_res);

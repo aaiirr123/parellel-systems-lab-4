@@ -124,7 +124,7 @@ fn run(
         // now participants
         let mut participant_opts = tpcoptions::TPCOptions::new();
         participant_opts.mode = "participant".to_string();
-        participant_opts.log_path = "test".to_string();
+
         participant_opts.num = i;
 
         let par_test = spawn_child_and_connect(&mut participant_opts);
@@ -148,7 +148,6 @@ fn run(
 fn run_client(opts: &tpcoptions::TPCOptions, running: Arc<AtomicBool>) {
     let connectors: (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
         connect_to_coordinator(opts);
-
     let mut client = client::Client::new(opts.num.to_string(), running, connectors.0, connectors.1);
     client.protocol(opts.num_requests);
 
@@ -167,13 +166,13 @@ fn run_client(opts: &tpcoptions::TPCOptions, running: Arc<AtomicBool>) {
 ///
 fn run_participant(opts: &tpcoptions::TPCOptions, running: Arc<AtomicBool>) {
     let participant_id_str = format!("participant_{}", opts.num);
-    let participant_log_path = format!("{}//{}.log", opts.log_path, participant_id_str);
     let connectors: (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
         connect_to_coordinator(opts);
+    let log_path = format!("{}//participant_{}.log", opts.log_path, opts.num);
 
     let mut participant = participant::Participant::new(
         participant_id_str,
-        participant_log_path,
+        log_path,
         running,
         opts.send_success_probability,
         opts.operation_success_probability,
