@@ -208,7 +208,7 @@ impl Coordinator {
                             should_commit = false;
                             break;
                         }
-                        thread::sleep(Duration::from_millis(1));
+                        thread::sleep(Duration::from_millis(2));
                         num_tries += 1;
                         continue;
                     }
@@ -231,11 +231,12 @@ impl Coordinator {
             0,
         );
 
-        for (key, value) in &self.clients_sender_set {
-            value.send(exit_msg.clone()).unwrap();
+        for (_key, tx) in &self.clients_sender_set {
+            tx.send(exit_msg.clone()).ok();
         }
-        for (key, value) in &self.particiapnt {
-            value.0.send(exit_msg.clone()).unwrap();
+
+        for (_key, (tx, _)) in &self.particiapnt {
+            tx.send(exit_msg.clone()).ok();
         }
     }
 
@@ -278,7 +279,6 @@ impl Coordinator {
     ///
     pub fn protocol(&mut self) {
         // TODO
-        println!("running coordinator protocol");
 
         while self.running.load(Ordering::SeqCst) {
             for event in self.client_receiver_set.select().unwrap() {
@@ -293,6 +293,12 @@ impl Coordinator {
                         if client_message.mtype == MessageType::ClientRequest {
                             // println!("Recieved a client request");
 
+                            // check to see if a cancelation has been sent before we go
+                            // to the next task
+                            if !self.running.load(Ordering::SeqCst) {
+                                break;
+                            }
+
                             let should_commit: bool =
                                 self.send_particapant_work(client_message.clone());
                             // println!("Coordinator wants to commit");
@@ -302,12 +308,23 @@ impl Coordinator {
                                 self.failed_ops += 1;
                             }
 
+                            if !self.running.load(Ordering::SeqCst) {
+                                break;
+                            }
+
                             self.send_particapant_result(should_commit, client_message.clone());
+
+                            if !self.running.load(Ordering::SeqCst) {
+                                break;
+                            }
+
                             self.send_client_result(
                                 should_commit,
                                 client_message.clone(),
                                 id.clone(),
                             );
+                        } else if client_message.mtype == MessageType::CoordinatorExit {
+                            break;
                         }
                     }
                     ipc_channel::ipc::IpcSelectionResult::ChannelClosed(_) => {
@@ -318,8 +335,6 @@ impl Coordinator {
         }
 
         self.send_coordinator_cancel_alert();
-
-        println!("broke from the protocol");
 
         self.report_status();
     }

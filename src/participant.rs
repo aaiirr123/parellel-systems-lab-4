@@ -161,12 +161,23 @@ impl Participant {
                 }
             } else if (message.mtype == MessageType::CoordinatorCommit) {
                 // println!("commited work");
+                self.log.append(
+                    message.mtype,
+                    message.txid.clone(),
+                    message.senderid.clone(),
+                    message.opid.clone(),
+                );
 
                 self.successful_ops += 1;
                 return true;
             } else if message.mtype == MessageType::CoordinatorAbort {
                 // println!("Coordinator asked participant to abort");
-
+                self.log.append(
+                    message.mtype,
+                    message.txid.clone(),
+                    message.senderid.clone(),
+                    message.opid.clone(),
+                );
                 self.failed_ops += 1;
 
                 return true;
@@ -222,6 +233,10 @@ impl Participant {
             }
         };
 
+        if res.mtype == MessageType::CoordinatorExit {
+            return None;
+        }
+
         // println!("Recieved result for particapant");
         return Some(res);
 
@@ -261,7 +276,15 @@ impl Participant {
             let pm = ProtocolMessage::generate(msg_type, self.id_str.clone(), "1".to_string(), 1);
 
             // send original status
+            if !self.running.load(Ordering::SeqCst) {
+                break;
+            }
+
             self.send(pm);
+
+            if !self.running.load(Ordering::SeqCst) {
+                break;
+            }
 
             // verify with the coordinator what the overall decision is
             // println!("verify with coordinator");
@@ -273,6 +296,10 @@ impl Participant {
             };
 
             let opt_two = Some(commit_res);
+            if !self.running.load(Ordering::SeqCst) {
+                break;
+            }
+
             self.perform_operation(&opt_two);
         }
 

@@ -148,7 +148,9 @@ fn run(
 fn run_client(opts: &tpcoptions::TPCOptions, running: Arc<AtomicBool>) {
     let connectors: (Sender<ProtocolMessage>, Receiver<ProtocolMessage>) =
         connect_to_coordinator(opts);
-    let mut client = client::Client::new(opts.num.to_string(), running, connectors.0, connectors.1);
+    let client_id_str = format!("client_{}", opts.num);
+
+    let mut client = client::Client::new(client_id_str, running, connectors.0, connectors.1);
     client.protocol(opts.num_requests);
 
     // TODO
@@ -193,7 +195,7 @@ fn recieve_and_check_for_finish(rx: &Receiver<ProtocolMessage>) -> Option<Protoc
             return Some(val);
         }
         Err(err) => {
-            eprintln!("Disconnected client {:?}", err);
+            // eprintln!("Disconnected {:?}", err);
             return None;
         }
     }

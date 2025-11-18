@@ -82,15 +82,17 @@ impl Client {
         trace!("{}::Waiting for exit signal", self.id_str.clone());
 
         // println!("Client is done, waiting on the coordinator");
+        if self.running.load(Ordering::SeqCst) {
+            let exit_msg = self.recv_result();
 
-        let exit_msg = self.recv_result();
-
-        if exit_msg != MessageType::CoordinatorExit {
-            panic!(
-                "Recieved a non exit messae from the coordinator {:?}",
-                exit_msg
-            );
+            if exit_msg != MessageType::CoordinatorExit {
+                panic!(
+                    "Recieved a non exit messae from the coordinator {:?}",
+                    exit_msg
+                );
+            }
         }
+
         // TODO
 
         trace!("{}::Exiting", self.id_str.clone());
@@ -191,7 +193,7 @@ impl Client {
                 self.successful_ops += 1;
             } else if coord_res == MessageType::ClientResultAbort {
                 // println!("Coordinator got client abort");
-         
+
                 self.failed_ops += 1;
             } else if coord_res == MessageType::CoordinatorExit {
                 // println!("Coordinator has disconectted");
